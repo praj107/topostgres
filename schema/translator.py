@@ -23,10 +23,6 @@ def _translate_table(mysql_sql: str) -> str:
         if not line:
             continue
 
-        # Skip generated columns completely
-        if "GENERATED ALWAYS AS" in line.upper():
-            continue
-
         if any(line.upper().startswith(x) for x in ("KEY ", "UNIQUE KEY ", "FULLTEXT KEY", "SPATIAL KEY", "PRIMARY KEY")):
             constraint = _translate_constraint(line)
             if constraint:
@@ -34,11 +30,35 @@ def _translate_table(mysql_sql: str) -> str:
             continue
 
         if _is_column_definition(line):
+            if "GENERATED ALWAYS AS" in line.upper():
+                line = _strip_generated_column(line)  # ✅ Preserve column, strip generated logic
             pg_lines.append(_translate_column(line))
             continue
 
     pg_sql = f"CREATE TABLE {table_name} (\n    " + ",\n    ".join(pg_lines) + "\n);"
     return pg_sql
+
+
+def _strip_generated_column(line: str) -> str:
+    """
+    Removes the GENERATED ALWAYS AS (...) clause while keeping the column definition.
+    """
+    # If it’s just the generated clause, preserve the column and type
+    match = re.match(
+        r"^\s*`?(?P<col>\w+)`?\s+(?P<type>\w+(?:\([^)]+\))?)\s+GENERATED\s+ALWAYS\s+AS\s*\(\(.*?\)\)\s*(STORED|VIRTUAL)?",
+        line,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+    if match:
+        return f"{match.group('col')} {match.group('type')}"
+
+    # Otherwise strip normally
+    return re.sub(
+        r"GENERATED\s+ALWAYS\s+AS\s*\(\(.*?\)\)\s*(STORED|VIRTUAL)?",
+        "",
+        line,
+        flags=re.IGNORECASE | re.DOTALL
+    ).strip()
 
 
 def _split_sql_lines(block: str) -> List[str]:

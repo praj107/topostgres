@@ -2,6 +2,8 @@ import psycopg2
 from psycopg2 import sql
 
 from config.config import DatabaseConfig
+from utils.logger import log
+import time
 
 def import_table_data(table, rows:list[dict], config: DatabaseConfig):
     """
@@ -21,8 +23,11 @@ def import_table_data(table, rows:list[dict], config: DatabaseConfig):
     insert_query = sql.SQL(f"INSERT INTO {table} VALUES ({placeholders})")
     
     for row in rows:
-        cur.execute(insert_query, row)
-
+        try:
+            cur.execute(insert_query, row)
+        except Exception as e:
+            log(f"Error inserting row {row} into table {table}: {e}", level="error")
+            time.sleep(1)
     conn.commit()
     cur.close()
     conn.close()
