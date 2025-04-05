@@ -17,12 +17,14 @@ def _translate_table(mysql_sql: str) -> str:
     table_name, body, suffix = match.groups()
     lines = _split_sql_lines(body)
 
-    generated_columns = set()
     pg_lines = []
-
     for line in lines:
         line = line.strip().rstrip(",")
         if not line:
+            continue
+
+        # Skip generated columns completely
+        if "GENERATED ALWAYS AS" in line.upper():
             continue
 
         if any(line.upper().startswith(x) for x in ("KEY ", "UNIQUE KEY ", "FULLTEXT KEY", "SPATIAL KEY", "PRIMARY KEY")):
@@ -32,16 +34,6 @@ def _translate_table(mysql_sql: str) -> str:
             continue
 
         if _is_column_definition(line):
-            col_name = _extract_column_name(line)
-            generated_expr = _extract_generated_expr(line)
-
-            if generated_expr:
-                # If the expression references any prior generated column, drop the GENERATED portion
-                if any(re.search(rf"\b{col}\b", generated_expr) for col in generated_columns):
-                    line = _remove_generated_expr(line)
-                else:
-                    generated_columns.add(col_name)
-
             pg_lines.append(_translate_column(line))
             continue
 
@@ -107,9 +99,6 @@ def _translate_column(line: str) -> str:
 
     extras = _clean_extras(extras)
 
-    if "generated always as" in extras.lower() and "virtual" in extras.lower():
-        extras = re.sub(r"\s+VIRTUAL\b", "", extras, flags=re.IGNORECASE)
-
     if mysql_type in ("tinyint", "smallint", "mediumint", "int", "integer", "bigint"):
         pg_type = TYPE_MAP.get(mysql_type, "INTEGER")
         return f"{col} {pg_type} {extras}".strip()
@@ -152,27 +141,12 @@ def _translate_column(line: str) -> str:
     return f"{col} TEXT {extras}".strip()
 
 
-def _extract_column_name(line: str) -> str:
-    match = re.match(r"^\s*`?(?P<col>\w+)`?\s+", line.strip(), flags=re.IGNORECASE)
-    return match.group("col") if match else ""
-
-
-def _extract_generated_expr(line: str) -> str:
-    match = re.search(r"GENERATED\s+ALWAYS\s+AS\s*\(\((.*?)\)\)", line, flags=re.IGNORECASE | re.DOTALL)
-    return match.group(1).strip() if match else None
-
-
-def _remove_generated_expr(line: str) -> str:
-    return re.sub(r"GENERATED\s+ALWAYS\s+AS\s*\(\(.*?\)\)\s*STORED?", "", line, flags=re.IGNORECASE | re.DOTALL)
-
-
 def _clean_extras(extras: str) -> str:
     extras = extras.strip()
     extras = re.sub(r"CHARACTER SET\s+\w+", '', extras, flags=re.IGNORECASE)
     extras = re.sub(r"COLLATE\s+\w+", '', extras, flags=re.IGNORECASE)
     extras = re.sub(r"ON UPDATE CURRENT_TIMESTAMP", '', extras, flags=re.IGNORECASE)
     extras = re.sub(r"_utf8mb4'([^']*)'", r"'\1'", extras, flags=re.IGNORECASE)
-    extras = re.sub(r"(GENERATED\s+ALWAYS\s+AS\s*\(\(.*?\)\))(?!\s*STORED)", r"\1 STORED", extras, flags=re.IGNORECASE | re.DOTALL)
     extras = extras.replace("\n", " ")
     extras = re.sub(r"\s{2,}", ' ', extras)
     return extras.strip()

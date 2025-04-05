@@ -1,5 +1,0 @@
-mysql-connector-python
-psycopg2-binary
-rich                  # optional: for pretty logging
-sqlalchemy             # optional: for SQLAlchemy support
-sqlalchemy-migrate    # optional: for SQLAlchemy migration support
