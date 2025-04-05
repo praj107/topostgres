@@ -1,0 +1,17 @@
+{
+  "mysql": {
+    "host": "10.0.0.47",
+    "user": "pgloader",
+    "password": "pgpass123",
+    "database": "rex3",
+    "port": 3306
+  },
+  "postgres": {
+    "host": "10.0.0.47",
+    "user": "postgres",
+    "password": "postgres",
+    "dbname": "rex3",
+    "port": 5432
+  }
+}
+  
