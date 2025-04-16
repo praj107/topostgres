@@ -35,7 +35,8 @@ def _translate_table(mysql_sql: str) -> str:
             pg_lines.append(_translate_column(line))
             continue
 
-    pg_sql = f"CREATE TABLE {table_name} (\n    " + ",\n    ".join(pg_lines) + "\n);"
+    pg_sql = f"CREATE TABLE {table_name} (\n    " + ",\n    ".join(pg_lines) + "\n);\n"
+
     return pg_sql
 
 
@@ -178,14 +179,45 @@ def _translate_constraint(line: str) -> str:
     if any(x in line.upper() for x in ("FULLTEXT", "SPATIAL")):
         return ""
 
-    match = re.match(r"UNIQUE KEY \w+ \((.+)\)", line, re.IGNORECASE)
-    if match:
-        return f"UNIQUE ({match.group(1)})"
+    # Normalize spacing and remove length from column names like bio(255)
+    def strip_lengths(columns: str) -> str:
+        return ", ".join(re.sub(r"\(\d+\)", "", col.strip()) for col in columns.split(","))
 
-    if "UNIQUE" in line.upper():
-        return re.sub(r"UNIQUE KEY", "UNIQUE", line, flags=re.IGNORECASE)
+    # FOREIGN KEY with optional CONSTRAINT name
+    fk_match = re.match(
+        r"(CONSTRAINT\s+(\w+)\s+)?FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(\w+)\s*\(([^)]+)\)",
+        line,
+        re.IGNORECASE
+    )
+    if fk_match:
+        constraint_name = fk_match.group(2)
+        cols = strip_lengths(fk_match.group(3))
+        ref_table = fk_match.group(4)
+        ref_cols = strip_lengths(fk_match.group(5))
+        if constraint_name:
+            return f"CONSTRAINT {constraint_name} FOREIGN KEY ({cols}) REFERENCES {ref_table} ({ref_cols})"
+        return f"FOREIGN KEY ({cols}) REFERENCES {ref_table} ({ref_cols})"
+
+    # UNIQUE KEY or unnamed UNIQUE constraint
+    if match := re.match(r"(UNIQUE\s+KEY\s+\w+\s*)?\((.+)\)", line, flags=re.IGNORECASE):
+        cols = strip_lengths(match.group(2))
+        return f"UNIQUE ({cols})"
+
+    if match := re.match(r"UNIQUE KEY \w+ \((.+)\)", line, re.IGNORECASE):
+        cols = strip_lengths(match.group(1))
+        return f"UNIQUE ({cols})"
+
+    # Skip KEY or INDEX — create separately after table
+    if match := re.match(r"(KEY|INDEX)\s+\w+\s*\((.+)\)", line, re.IGNORECASE):
+        return ""
+
+    # PRIMARY KEY is valid in CREATE TABLE
+    if match := re.match(r"(PRIMARY\s+KEY)\s*\((.+)\)", line, re.IGNORECASE):
+        cols = strip_lengths(match.group(2))
+        return f"{match.group(1).upper()} ({cols})"
 
     return line
+
 
 
 def _convert_enum_full(col: str, rest: str):

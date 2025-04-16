@@ -41,8 +41,9 @@ def import_table_data(table: str, rows: list[tuple], config: DatabaseConfig):
             cur.execute(insert_query, row)
             successes += 1
         except Exception as e:
-            log(f"[{table}] Failed row {idx}/{total_rows}: {e}", level="error")
+            log(f"[{table}] Failed row {idx}/{total_rows}: {e}. Query, row: [{insert_query}, {row}]", level="error")
             failures += 1
+            break
 
         if idx % 500 == 0:
             conn.commit()

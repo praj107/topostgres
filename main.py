@@ -11,6 +11,9 @@ from config.config import MYSQL, POSTGRES
 # python -m unittest tests/test.py
 
 # Utils functions:
+TABLE_NAME_SKIPLIST = [
+
+]
 def count_columns(create_stmt: str) -> int:
     """
     Counts column definitions based on how many ',\n' or ', [whitespace]\n' occur.
@@ -38,10 +41,13 @@ def migrate_schema():
     log(f"Translated {len(translated)} tables [~{sum([count_columns(x) for x in translated.values()])} columns total] to PostgreSQL.", "info")
     log("Creating PostgreSQL tables...", "info")
     create_pg_tables(translated, POSTGRES)
+
+    
     log("✅ Schema migration complete.", "success")
 
 def migrate_data():
-    tables = get_mysql_tables(MYSQL)
+    tables = [x for x in get_mysql_tables(MYSQL) if x not in TABLE_NAME_SKIPLIST]
+    log(f"Skipping tables: {TABLE_NAME_SKIPLIST}", "info")
     for table in tables:
         log(f"Migrating data: {table}", "info")
         rows = export_table_data(table, MYSQL)
@@ -49,7 +55,7 @@ def migrate_data():
 
 def main():
     migrate_schema()
-    migrate_data()
+    # migrate_data()
 
 if __name__ == "__main__":
     main()

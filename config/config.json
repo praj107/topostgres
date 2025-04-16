@@ -1,16 +1,16 @@
 {
   "mysql": {
-    "host": "10.0.0.47",
+    "host": "localhost",
     "user": "pgloader",
     "password": "pgpass123",
-    "database": "rex3",
+    "database": "rex3v2",
     "port": 3306
   },
   "postgres": {
-    "host": "10.0.0.47",
+    "host": "localhost",
     "user": "postgres",
     "password": "postgres",
-    "dbname": "rex3",
+    "dbname": "rex3v2_legacy",
     "port": 5432
   }
 }

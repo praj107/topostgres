@@ -1,0 +1,8 @@
+CREATE TABLE bios (
+    id BIGINT NOT NULL,
+    bio TEXT NOT NULL,
+    pros VARCHAR(45) DEFAULT NULL,
+    timestamp TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (discordid, timestamp),
+    UNIQUE (bio, pros)
+);

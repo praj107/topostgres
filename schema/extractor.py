@@ -1,5 +1,6 @@
 import mysql.connector
-
+import re
+from typing import Dict, List
 from config.config import DatabaseConfig
 
 def get_mysql_tables(config: DatabaseConfig) -> list[str]:
@@ -9,10 +10,10 @@ def get_mysql_tables(config: DatabaseConfig) -> list[str]:
     in the form of a list of strings representing their respective creation SQL statements.
 
     Args:
-        config (_type_): _description_
+        config (DatabaseConfig): Config object for the database connection.
 
     Returns:
-        list[str]: _description_
+        list[str]: The list of tables in the database, each represented by its creation SQL statement.
     """
     # Connect to MySQL database and setup cursor:
     conn = mysql.connector.connect(**config.unpack_mysql())
