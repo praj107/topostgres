@@ -2,9 +2,92 @@ import re
 from typing import List
 from .type_map import TYPE_MAP, get_serial_type
 
+def extract_foreign_keys(pg_sql: str) -> List[dict[str, str]]:
+    """
+    Extracts foreign key constraints from PostgreSQL SQL statements.
+
+
+    Args:
+        pg_sql (str): The PostgreSQL SQL statement to extract foreign keys from.
+
+    Returns:
+        List[dict[str, str]]: A list of dictionaries, each containing the local columns, foreign table name, and foreign columns. 
+    """
+    # General regex for FOREIGN KEY constraints
+    pattern = re.compile(
+        r'''
+        FOREIGN\s+KEY\s*\(
+            (?P<local_cols>[^)]+)        # Capture local columns
+        \)
+        \s*REFERENCES\s+
+            (?P<foreign_table>\w+)       # Capture foreign table name
+        \s*\(
+            (?P<foreign_cols>[^)]+)      # Capture foreign columns
+        \)
+        ''',
+        re.IGNORECASE | re.VERBOSE | re.MULTILINE
+    )
+
+    foreign_keys = []
+
+    for match in pattern.finditer(pg_sql):
+        local_columns = [col.strip() for col in match.group('local_cols').split(',')]
+        foreign_table = match.group('foreign_table').strip()
+        foreign_columns = [col.strip() for col in match.group('foreign_cols').split(',')]
+        
+        foreign_keys.append({
+            'local_columns': local_columns,
+            'foreign_table': foreign_table,
+            'foreign_columns': foreign_columns
+        })
+
+    return foreign_keys
+
+def extract_single_column_uniques_and_pks(pg_sql: str) -> List[str]:
+    # Match UNIQUE (...) and PRIMARY KEY (...) — with or without CONSTRAINT keyword
+    unique_matches = re.findall(r'^\s*(?:CONSTRAINT\s+\w+\s+)?UNIQUE\s*\(([^)]+)\)', pg_sql, re.MULTILINE)
+    primary_matches = re.findall(r'^\s*(?:CONSTRAINT\s+\w+\s+)?PRIMARY KEY\s*\(([^)]+)\)', pg_sql, re.MULTILINE)
+
+    # Filter only those constraints that cover exactly one column
+    unique_keys = [col.strip() for cols in unique_matches if len(cols.split(',')) == 1 for col in cols.split(',')]
+    primary_keys = [col.strip() for cols in primary_matches if len(cols.split(',')) == 1 for col in cols.split(',')]
+
+    return unique_keys, primary_keys
+
 
 def translate_schema(tables: dict[str, str]) -> dict[str, str]:
-    return {x: _translate_table(tables[x]) for x in tables.keys()}
+    initial_postgres_sql = {x: _translate_table(tables[x]) for x in tables.keys()}
+    sole_unique_and_primary_keys_columns = {} # {table_name: column_name (if individually unique or primary key)}]}
+    first_stage_processed_postgres_sql = {}
+    # Now we need to check, and remove, invalid foreign keys, the ones which do not point to a solely unique or primary key column.:
+    for table_name, pg_sql in initial_postgres_sql.items():
+        # Get individually unique and primary keys in the table
+        unique, primary = extract_single_column_uniques_and_pks(pg_sql)
+        # Update the dictionary with the unique and primary keys
+        for col in unique + primary:
+            sole_unique_and_primary_keys_columns[table_name] = col
+        print(f"Table: {table_name}.\nUnique keys: {unique}\nPrimary keys: {primary}")
+        # Get the list of foreign keys in the table:
+        foreign_keys = extract_foreign_keys(pg_sql)
+        print(f"Foreign keys: {foreign_keys}")
+        for d in foreign_keys:
+            foreign_table, foreign_cols = d['foreign_table'], d['foreign_columns']
+            for foreign_col in foreign_cols:
+                # Check if the referenced column is NOT solely unique/primary
+                if foreign_col not in sole_unique_and_primary_keys_columns.get(foreign_table, []):
+                    print(f"Foreign key {d} in table {table_name} is invalid, removing it.")
+                    # Make a basic pattern to find the reference
+                    reference_pattern = rf'REFERENCES\s+{foreign_table}\s*\(\s*{foreign_col}\s*\)'
+                    # Remove any line containing that reference
+                    pg_sql = "\n".join(
+                        line for line in pg_sql.splitlines()
+                        if not re.search(reference_pattern, line, flags=re.IGNORECASE)
+                    ).replace(",\n);", "\n);")  # Remove the comma before the closing parenthesis if it exists
+                    
+        first_stage_processed_postgres_sql[table_name] = pg_sql
+
+
+    return first_stage_processed_postgres_sql
 
 
 def _translate_table(mysql_sql: str) -> str:

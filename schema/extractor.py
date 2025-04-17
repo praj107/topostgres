@@ -32,3 +32,30 @@ def get_mysql_tables(config: DatabaseConfig) -> list[str]:
     cursor.close()
     conn.close()
     return tables
+
+
+def _get_mysql_tables_raw(sql: str) -> dict[str, str]:
+    """
+    Extracts all table creation SQL statements from a MySQL script.
+
+    Args:
+        sql (str): The full SQL script.
+
+    Returns:
+        dict[str, str]: Mapping of table names to their CREATE TABLE SQL statements.
+    """
+    tables = {}
+
+    # Regex to match CREATE TABLE statements properly
+    pattern = re.compile(
+        r'(CREATE\s+TABLE\s+`?(\w+)`?\s*\(.*?)(?=(?:CREATE\s+TABLE|$))',
+        re.IGNORECASE | re.DOTALL
+    )
+
+    for match in pattern.finditer(sql):
+        full_statement = match.group(1).strip()
+        table_name = match.group(2)
+        tables[table_name] = full_statement
+
+    return tables
+

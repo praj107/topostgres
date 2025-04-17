@@ -55,7 +55,7 @@ def migrate_data():
 
 def main():
     migrate_schema()
-    # migrate_data()
+    migrate_data()
 
 if __name__ == "__main__":
     main()
