@@ -1,4 +1,5 @@
 import re
+from sqlalchemy.engine import URL
 from schema.extractor import get_mysql_tables
 from schema.translator import translate_schema
 from schema.creator import create_pg_tables
@@ -31,14 +32,21 @@ def count_columns(create_stmt: str) -> int:
 
 # Migration functions:
 def migrate_schema():
-    log("Extracting schema from MySQL...", "info")
-    tables = get_mysql_tables(MYSQL)
-    log(f"Fetched {len(tables)} tables [~{sum([count_columns(x) for x in tables.values()])} columns total] from MySQL.", "info")
-    [print(f"===[MYSQL 8 version {x} ]===\n{tables[x]}\n===[ ------- ]===") for x in tables.keys()]
-    log("Translating schema to PostgreSQL...", "info")
-    translated = translate_schema(tables)
+    log("Translating schema to PostgreSQL via SQLAlchemy reflection...", "info")
+    url = URL.create(
+        "mysql+mysqlconnector",
+        username=MYSQL.user,
+        password=MYSQL.password,
+        host=MYSQL.host,
+        port=MYSQL.port,
+        database=MYSQL.database,
+    )
+    translated = translate_schema(str(url))
     [print(f"===[POSTGRES version {x} ]===\n{translated[x]}\n===[ ------- ]===") for x in translated.keys()]
-    log(f"Translated {len(translated)} tables [~{sum([count_columns(x) for x in translated.values()])} columns total] to PostgreSQL.", "info")
+    log(
+        f"Translated {len(translated)} tables [~{sum([count_columns(x) for x in translated.values()])} columns total] to PostgreSQL.",
+        "info",
+    )
     log("Creating PostgreSQL tables...", "info")
     create_pg_tables(translated, POSTGRES)
 
